@@ -173,6 +173,22 @@ async def bluesound_stop():
     return {"ok": True}
 
 
+@app.post("/api/bluesound/skip")
+async def bluesound_skip():
+    async with httpx.AsyncClient() as client:
+        r = await client.get(f"{BLUESOUND_URL}/Skip", timeout=5)
+        r.raise_for_status()
+    return {"ok": True}
+
+
+@app.post("/api/bluesound/back")
+async def bluesound_back():
+    async with httpx.AsyncClient() as client:
+        r = await client.get(f"{BLUESOUND_URL}/Back", timeout=5)
+        r.raise_for_status()
+    return {"ok": True}
+
+
 @app.post("/api/bluesound/input/hdmi")
 async def bluesound_hdmi():
     async with httpx.AsyncClient() as client:
