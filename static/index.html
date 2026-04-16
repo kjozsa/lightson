@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>LightsOn</title>
+  <style>
+    /* ── reset & tokens ────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f0f14;
+      --surface:   #1c1c26;
+      --surface2:  #26263a;
+      --border:    #2e2e44;
+      --text:      #e8e8f0;
+      --muted:     #7070a0;
+      --on:        #4ade80;
+      --on-glow:   rgba(74, 222, 128, 0.18);
+      --off:       #475569;
+      --accent:    #818cf8;
+      --danger:    #f87171;
+      --radius:    14px;
+      --shadow:    0 4px 24px rgba(0,0,0,.45);
+    }
+
+    html { height: 100%; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 16px;
+      min-height: 100%;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    /* ── header ────────────────────────────────────────────────────── */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 16px 12px;
+    }
+
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -.3px;
+      flex: 1;
+    }
+    h1 span { color: var(--accent); }
+
+    /* ── pill buttons ───────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: none;
+      border-radius: 999px;
+      padding: 8px 16px;
+      font-size: .85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+      white-space: nowrap;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn:active { transform: scale(.95); opacity: .8; }
+
+    .btn-on  { background: var(--on);   color: #0a2010; }
+    .btn-off { background: var(--off);  color: var(--text); }
+    .btn-refresh {
+      background: var(--surface2);
+      color: var(--accent);
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+    }
+
+    /* ── main content ───────────────────────────────────────────────── */
+    main {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* ── status bar ─────────────────────────────────────────────────── */
+    #status-bar {
+      font-size: .8rem;
+      color: var(--muted);
+      text-align: center;
+      min-height: 1.4em;
+    }
+    #status-bar.error { color: var(--danger); }
+
+    /* ── device card ────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: var(--shadow);
+      transition: background .25s, border-color .25s, box-shadow .25s;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    .card.is-on {
+      background: color-mix(in srgb, var(--surface) 85%, var(--on));
+      border-color: rgba(74,222,128,.35);
+      box-shadow: 0 0 0 1px rgba(74,222,128,.15), var(--shadow);
+    }
+    .card.busy { opacity: .65; pointer-events: none; }
+
+    .card-info { flex: 1; min-width: 0; }
+    .card-name {
+      font-size: 1.05rem;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .card-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .badge {
+      font-size: .7rem;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: var(--surface2);
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .4px;
+    }
+    .card-state-label {
+      font-size: .75rem;
+      font-weight: 700;
+      letter-spacing: .5px;
+      color: var(--muted);
+    }
+    .card.is-on .card-state-label { color: var(--on); }
+
+    /* ── toggle switch ──────────────────────────────────────────────── */
+    .toggle {
+      flex-shrink: 0;
+      width: 58px;
+      height: 32px;
+      position: relative;
+    }
+    .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+
+    .toggle-track {
+      position: absolute;
+      inset: 0;
+      border-radius: 999px;
+      background: var(--off);
+      transition: background .2s;
+    }
+    .toggle input:checked + .toggle-track { background: var(--on); }
+
+    .toggle-thumb {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,.4);
+      transition: transform .2s cubic-bezier(.34,1.56,.64,1);
+    }
+    .toggle input:checked ~ .toggle-thumb { transform: translateX(26px); }
+
+    /* ── loading skeleton ───────────────────────────────────────────── */
+    @keyframes shimmer {
+      0%   { background-position: -400px 0; }
+      100% { background-position: 400px 0; }
+    }
+    .skeleton {
+      background: linear-gradient(90deg, var(--surface) 25%, var(--surface2) 50%, var(--surface) 75%);
+      background-size: 800px 100%;
+      animation: shimmer 1.4s infinite;
+      border-radius: var(--radius);
+      height: 72px;
+    }
+
+    /* ── spinner ────────────────────────────────────────────────────── */
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+      vertical-align: middle;
+    }
+
+    /* ── empty state ────────────────────────────────────────────────── */
+    .empty {
+      text-align: center;
+      color: var(--muted);
+      padding: 48px 0;
+      font-size: .95rem;
+      line-height: 1.7;
+    }
+
+    /* ── desktop tweaks ─────────────────────────────────────────────── */
+    @media (min-width: 600px) {
+      main { padding: 24px 16px; }
+      .card { padding: 18px 22px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-row">
+    <h1>Lights<span>On</span></h1>
+    <button class="btn btn-on"  id="btn-all-on" >All ON</button>
+    <button class="btn btn-off" id="btn-all-off">All OFF</button>
+    <button class="btn btn-refresh" id="btn-refresh" title="Re-scan devices">
+      <span id="refresh-icon">⟳</span>
+    </button>
+  </div>
+</header>
+
+<main>
+  <div id="status-bar"></div>
+  <div id="device-list"></div>
+</main>
+
+<script>
+  const list      = document.getElementById('device-list');
+  const statusBar = document.getElementById('status-bar');
+  const btnAllOn  = document.getElementById('btn-all-on');
+  const btnAllOff = document.getElementById('btn-all-off');
+  const btnRefresh= document.getElementById('btn-refresh');
+  const refreshIcon = document.getElementById('refresh-icon');
+
+  // ── state ──────────────────────────────────────────────────────────
+  let devices = [];   // [{id, name, state, method}]
+  let loading = false;
+
+  // ── helpers ────────────────────────────────────────────────────────
+  function setStatus(msg, isError = false) {
+    statusBar.textContent = msg;
+    statusBar.className = isError ? 'error' : '';
+  }
+
+  async function apiFetch(url, method = 'GET') {
+    const res = await fetch(url, { method });
+    if (!res.ok) throw new Error(`${method} ${url} → ${res.status}`);
+    return res.json();
+  }
+
+  // ── render ─────────────────────────────────────────────────────────
+  function renderSkeletons(n = 3) {
+    list.innerHTML = Array(n).fill('<div class="skeleton"></div>').join('');
+  }
+
+  function renderDevices() {
+    if (!devices.length) {
+      list.innerHTML = `<div class="empty">No devices found.<br>Run <strong>Refresh</strong> to scan the network.</div>`;
+      return;
+    }
+
+    list.innerHTML = devices.map(dev => {
+      const isOn    = dev.state === true;
+      const stateLabel = dev.state === null ? '???' : (isOn ? 'ON' : 'OFF');
+      return `
+        <div class="card ${isOn ? 'is-on' : ''}" data-id="${dev.id}" role="button" tabindex="0"
+             aria-label="${dev.name}, ${stateLabel}">
+          <div class="card-info">
+            <div class="card-name">${escHtml(dev.name)}</div>
+            <div class="card-meta">
+              <span class="badge">${dev.method}</span>
+              <span class="card-state-label">${stateLabel}</span>
+            </div>
+          </div>
+          <label class="toggle" aria-label="Toggle ${escHtml(dev.name)}"
+                 onclick="event.stopPropagation()">
+            <input type="checkbox" ${isOn ? 'checked' : ''}
+                   onchange="handleToggle(event, ${dev.id})">
+            <span class="toggle-track"></span>
+            <span class="toggle-thumb"></span>
+          </label>
+        </div>`;
+    }).join('');
+
+    // tap on card body (not the toggle itself) also toggles
+    list.querySelectorAll('.card').forEach(card => {
+      card.addEventListener('click', () => {
+        const id = parseInt(card.dataset.id);
+        const cb = card.querySelector('input[type=checkbox]');
+        handleToggle(null, id, cb.checked);
+      });
+      card.addEventListener('keydown', e => {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault();
+          card.click();
+        }
+      });
+    });
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── load all statuses ──────────────────────────────────────────────
+  async function loadDevices() {
+    if (loading) return;
+    loading = true;
+    renderSkeletons(devices.length || 3);
+    setStatus('Loading…');
+    try {
+      devices = await apiFetch('/api/devices');
+      renderDevices();
+      setStatus(`${devices.length} device${devices.length !== 1 ? 's' : ''} — updated ${now()}`);
+    } catch (e) {
+      setStatus('Failed to load devices: ' + e.message, true);
+    } finally {
+      loading = false;
+    }
+  }
+
+  // ── toggle single device ───────────────────────────────────────────
+  async function handleToggle(event, id, currentState) {
+    if (event) event.stopPropagation();
+
+    const card = list.querySelector(`.card[data-id="${id}"]`);
+    if (!card || card.classList.contains('busy')) return;
+
+    // Determine what the new state should be
+    let newState;
+    if (currentState !== undefined) {
+      newState = !currentState;
+    } else {
+      const dev = devices.find(d => d.id === id);
+      newState = dev ? !dev.state : true;
+    }
+
+    // Optimistic update
+    card.classList.add('busy');
+    updateDeviceState(id, newState);
+
+    try {
+      const action = newState ? 'on' : 'off';
+      const res = await apiFetch(`/api/device/${id}/${action}`, 'POST');
+      if (!res.ok) throw new Error('Command failed');
+    } catch (e) {
+      // Revert on failure
+      updateDeviceState(id, !newState);
+      setStatus(`Failed to toggle device: ${e.message}`, true);
+    } finally {
+      card.classList.remove('busy');
+    }
+  }
+
+  function updateDeviceState(id, state) {
+    const dev = devices.find(d => d.id === id);
+    if (dev) dev.state = state;
+
+    const card = list.querySelector(`.card[data-id="${id}"]`);
+    if (!card) return;
+    const cb = card.querySelector('input[type=checkbox]');
+    const label = card.querySelector('.card-state-label');
+
+    cb.checked = state === true;
+    card.classList.toggle('is-on', state === true);
+    label.textContent = state === null ? '???' : (state ? 'ON' : 'OFF');
+    card.setAttribute('aria-label', `${dev?.name ?? id}, ${label.textContent}`);
+  }
+
+  // ── all on/off ─────────────────────────────────────────────────────
+  async function allAction(action) {
+    const btns = [btnAllOn, btnAllOff];
+    btns.forEach(b => b.disabled = true);
+    setStatus(`Turning all ${action.toUpperCase()}…`);
+
+    // Optimistic update
+    const newState = action === 'on';
+    devices.forEach(dev => updateDeviceState(dev.id, newState));
+
+    try {
+      const res = await apiFetch(`/api/all/${action}`, 'POST');
+      if (res.failed > 0) {
+        setStatus(`${res.failed} device(s) failed to turn ${action.toUpperCase()}`, true);
+        await loadDevices();   // reload real state
+      } else {
+        setStatus(`All ${action.toUpperCase()} — ${now()}`);
+      }
+    } catch (e) {
+      setStatus('Command failed: ' + e.message, true);
+      await loadDevices();
+    } finally {
+      btns.forEach(b => b.disabled = false);
+    }
+  }
+
+  // ── refresh (re-scan) ──────────────────────────────────────────────
+  async function doRefresh() {
+    btnRefresh.disabled = true;
+    refreshIcon.innerHTML = '<span class="spin"></span>';
+    setStatus('Scanning network…');
+    try {
+      await apiFetch('/api/refresh', 'POST');
+      setStatus('Scan complete — reloading…');
+      await loadDevices();
+    } catch (e) {
+      setStatus('Refresh failed: ' + e.message, true);
+    } finally {
+      btnRefresh.disabled = false;
+      refreshIcon.textContent = '⟳';
+    }
+  }
+
+  function now() {
+    return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // ── wire up ─────────────────────────────────────────────────────────
+  btnAllOn.addEventListener('click', () => allAction('on'));
+  btnAllOff.addEventListener('click', () => allAction('off'));
+  btnRefresh.addEventListener('click', doRefresh);
+
+  // initial load
+  loadDevices();
+</script>
+</body>
+</html>

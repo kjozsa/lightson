@@ -1,0 +1,11 @@
+[project]
+name = "lightson"
+version = "0.2.0"
+description = "SmartLife/Tuya local switch controller with web UI"
+requires-python = ">=3.11"
+dependencies = [
+    "tinytuya>=1.15",
+    "requests>=2.31",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+]
