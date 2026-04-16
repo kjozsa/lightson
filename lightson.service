@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 WorkingDirectory=/srv/lightson
-ExecStart=/srv/lightson/.venv/bin/uvicorn server:app --host 0.0.0.0 --port 8080
+ExecStart=/srv/lightson/.venv/bin/uvicorn server:app --host 0.0.0.0 --port 8003
 Restart=on-failure
 RestartSec=5
 
