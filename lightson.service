@@ -1,0 +1,12 @@
+[Unit]
+Description=LightsOn — SmartLife/Tuya switch web UI
+After=network.target
+
+[Service]
+WorkingDirectory=/srv/lightson
+ExecStart=/srv/lightson/.venv/bin/uvicorn server:app --host 0.0.0.0 --port 8080
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
