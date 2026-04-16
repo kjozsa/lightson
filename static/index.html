@@ -216,6 +216,90 @@
       vertical-align: middle;
     }
 
+    /* ── bluesound section ──────────────────────────────────────────── */
+    .section-label {
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 4px 2px;
+    }
+
+    .bs-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 18px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .bs-inputs {
+      display: flex;
+      gap: 8px;
+    }
+
+    .btn-input {
+      flex: 1;
+      justify-content: center;
+      background: var(--surface2);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      font-size: .9rem;
+    }
+    .btn-input.active {
+      background: color-mix(in srgb, var(--surface2) 60%, var(--accent));
+      color: var(--text);
+      border-color: var(--accent);
+    }
+    .btn-input:disabled { opacity: .4; cursor: not-allowed; }
+
+    .bs-controls {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .bs-volume {
+      flex: 1;
+      -webkit-appearance: none;
+      appearance: none;
+      height: 4px;
+      border-radius: 999px;
+      background: var(--border);
+      outline: none;
+      cursor: pointer;
+    }
+    .bs-volume::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      transition: transform .1s;
+    }
+    .bs-volume::-webkit-slider-thumb:active { transform: scale(1.3); }
+    .bs-volume::-moz-range-thumb {
+      width: 16px; height: 16px;
+      border: none;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+    }
+
+    .bs-now-playing {
+      font-size: .82rem;
+      color: var(--muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-height: 1.2em;
+    }
+    .bs-now-playing strong { color: var(--text); font-weight: 600; }
+
     /* ── empty state ────────────────────────────────────────────────── */
     .empty {
       text-align: center;
@@ -246,8 +330,23 @@
 </header>
 
 <main>
+  <div class="section-label">Lights</div>
   <div id="status-bar"></div>
   <div id="device-list"></div>
+
+  <div class="section-label">Music</div>
+  <div class="bs-card">
+    <div class="bs-inputs">
+      <button class="btn btn-input" id="btn-tidal"  onclick="bsSwitch('tidal')">TIDAL</button>
+      <button class="btn btn-input" id="btn-hdmi"   onclick="bsSwitch('hdmi')">HDMI ARC</button>
+    </div>
+    <div class="bs-now-playing" id="bs-info">Loading…</div>
+    <div class="bs-controls">
+      <input type="range" class="bs-volume" id="bs-volume" min="0" max="100" value="0">
+      <button class="btn btn-input" id="btn-playpause" onclick="bsPlayPause()">▶ Play</button>
+      <button class="btn btn-input" id="btn-stop"      onclick="bsCmd('stop')">⏹ Stop</button>
+    </div>
+  </div>
 </main>
 
 <script>
@@ -447,6 +546,89 @@
 
   // initial load
   loadDevices();
+
+  // ── bluesound ──────────────────────────────────────────────────────
+  const btnTidal  = document.getElementById('btn-tidal');
+  const btnHdmi   = document.getElementById('btn-hdmi');
+  const bsInfo    = document.getElementById('bs-info');
+
+  const btnPlayPause = document.getElementById('btn-playpause');
+  const btnStop      = document.getElementById('btn-stop');
+  const bsVolume     = document.getElementById('bs-volume');
+
+  let bsVolumeDragging = false;
+  bsVolume.addEventListener('pointerdown', () => bsVolumeDragging = true);
+  bsVolume.addEventListener('pointerup',   async () => {
+    bsVolumeDragging = false;
+    await apiFetch(`/api/bluesound/volume/${bsVolume.value}`, 'POST');
+  });
+
+  function bsRender(status) {
+    btnTidal.classList.toggle('active', status.input === 'tidal');
+    btnHdmi.classList.toggle('active',  status.input === 'hdmi');
+
+    const playing = status.state === 'stream' || status.state === 'play';
+    btnPlayPause.textContent = playing ? '⏸ Pause' : '▶ Play';
+    btnPlayPause.classList.toggle('active', playing);
+    if (!bsVolumeDragging) bsVolume.value = status.volume ?? 0;
+
+    if (status.input === 'hdmi') {
+      bsInfo.innerHTML = `<strong>HDMI ARC</strong> · vol ${status.volume}`;
+    } else if (status.input === 'tidal' && status.title) {
+      const artist = status.artist ? ` · <strong>${escHtml(status.artist)}</strong>` : '';
+      bsInfo.innerHTML = `${escHtml(status.title)}${artist} · vol ${status.volume}`;
+    } else {
+      bsInfo.innerHTML = status.title ? escHtml(status.title) : '—';
+    }
+  }
+
+  async function bsLoadStatus() {
+    try {
+      const s = await apiFetch('/api/bluesound/status');
+      bsRender(s);
+    } catch (e) {
+      bsInfo.textContent = 'Bluesound unavailable';
+    }
+  }
+
+  async function bsPlayPause() {
+    const playing = btnPlayPause.textContent.includes('Pause');
+    await bsCmd(playing ? 'pause' : 'play');
+  }
+
+  async function bsCmd(cmd) {
+    btnPlayPause.disabled = true;
+    btnStop.disabled = true;
+    try {
+      await apiFetch(`/api/bluesound/${cmd}`, 'POST');
+      await new Promise(r => setTimeout(r, 400));
+      await bsLoadStatus();
+    } catch (e) {
+      bsInfo.textContent = `${cmd} failed: ` + e.message;
+    } finally {
+      btnPlayPause.disabled = false;
+      btnStop.disabled = false;
+    }
+  }
+
+  async function bsSwitch(input) {
+    btnTidal.disabled = true;
+    btnHdmi.disabled  = true;
+    bsInfo.textContent = 'Switching…';
+    try {
+      const s = await apiFetch(`/api/bluesound/input/${input}`, 'POST');
+      // give the Node a moment to settle then refresh status
+      await new Promise(r => setTimeout(r, 800));
+      await bsLoadStatus();
+    } catch (e) {
+      bsInfo.textContent = 'Switch failed: ' + e.message;
+    } finally {
+      btnTidal.disabled = false;
+      btnHdmi.disabled  = false;
+    }
+  }
+
+  bsLoadStatus();
 </script>
 </body>
 </html>
