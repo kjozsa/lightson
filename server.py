@@ -17,9 +17,43 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+import tinytuya
+
 import lights
 
 BLUESOUND_URL = "http://192.168.10.130:11000"
+
+KITCHEN_ID      = "bf2dd20378b84bac28kecg"
+KITCHEN_IP      = "192.168.10.199"
+KITCHEN_KEY     = "R`jJ]=@TXaixN!$("
+KITCHEN_VERSION = 3.5
+
+
+def _kitchen_device():
+    d = tinytuya.BulbDevice(
+        dev_id=KITCHEN_ID, address=KITCHEN_IP,
+        local_key=KITCHEN_KEY, version=KITCHEN_VERSION,
+    )
+    d.set_socketTimeout(5)
+    return d
+
+
+def _get_kitchen_brightness() -> int:
+    """Returns 0 (off) or 1–100 (brightness %)."""
+    status = _kitchen_device().status()
+    dps = (status or {}).get("dps", {})
+    if not dps.get("20", False):
+        return 0
+    return round((dps.get("22", 10)) / 10)
+
+
+def _set_kitchen_brightness(level: int):
+    """level 0 = off; 1–100 = on + dim."""
+    dev = _kitchen_device()
+    if level == 0:
+        dev.set_value("20", False)
+    else:
+        dev.set_multiple_values({"20": True, "22": max(10, level * 10)})
 HDMI_PLAY_URL = "Capture:hw:imxspdif,0/1/25/2?id=input2"
 
 app = FastAPI(title="LightsOn")
@@ -105,6 +139,24 @@ async def all_action(action: str):
     )
     failed = sum(1 for r in results if isinstance(r, Exception) or not r)
     return {"ok": failed == 0, "failed": failed, "total": len(results)}
+
+
+# ---------------------------------------------------------------------------
+# Kitchen dimmer API
+# ---------------------------------------------------------------------------
+
+@app.get("/api/kitchen/status")
+async def kitchen_status():
+    brightness = await _run(_get_kitchen_brightness)
+    return {"brightness": brightness}
+
+
+@app.post("/api/kitchen/brightness/{level}")
+async def kitchen_brightness(level: int):
+    if not 0 <= level <= 100:
+        raise HTTPException(400, "level must be 0–100")
+    await _run(_set_kitchen_brightness, level)
+    return {"ok": True, "brightness": level}
 
 
 # ---------------------------------------------------------------------------

@@ -344,6 +344,71 @@
       font-variant-numeric: tabular-nums;
     }
 
+    /* ── kitchen dimmer card ────────────────────────────────────────── */
+    .dimmer-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: border-color .25s;
+    }
+    .dimmer-card.is-on { border-color: rgba(251,191,36,.35); }
+
+    .dimmer-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .dimmer-name {
+      font-size: 1.05rem;
+      font-weight: 600;
+    }
+    .dimmer-value {
+      font-size: .85rem;
+      font-weight: 700;
+      color: var(--muted);
+      min-width: 3ch;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .dimmer-card.is-on .dimmer-value { color: #fbbf24; }
+
+    .dimmer-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      background: linear-gradient(to right, #fbbf24 var(--fill, 0%), var(--border) var(--fill, 0%));
+      outline: none;
+      cursor: pointer;
+    }
+    .dimmer-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      background: #fbbf24;
+      cursor: pointer;
+      transition: transform .1s;
+    }
+    .dimmer-slider::-webkit-slider-thumb:active { transform: scale(1.3); }
+    .dimmer-slider::-moz-range-thumb {
+      width: 22px; height: 22px;
+      border: none;
+      border-radius: 50%;
+      background: #fbbf24;
+      cursor: pointer;
+    }
+    .dimmer-card:not(.is-on) .dimmer-slider::-webkit-slider-thumb { background: var(--muted); }
+    .dimmer-card:not(.is-on) .dimmer-slider::-moz-range-thumb { background: var(--muted); }
+    .dimmer-card:not(.is-on) .dimmer-slider {
+      background: linear-gradient(to right, var(--muted) var(--fill, 0%), var(--border) var(--fill, 0%));
+    }
+
     /* ── empty state ────────────────────────────────────────────────── */
     .empty {
       text-align: center;
@@ -377,6 +442,15 @@
   <div class="section-label">Lights</div>
   <div id="status-bar"></div>
   <div id="device-list"></div>
+
+  <div class="dimmer-card" id="kitchen-card">
+    <div class="dimmer-header">
+      <span class="dimmer-name">Kitchen</span>
+      <span class="dimmer-value" id="kitchen-val">—</span>
+    </div>
+    <input type="range" class="dimmer-slider" id="kitchen-slider"
+           min="0" max="100" value="0">
+  </div>
 
   <div class="section-label">Music</div>
   <div class="bs-card">
@@ -699,6 +773,38 @@
 
   bsLoadStatus();
   setInterval(bsLoadStatus, 5000);
+
+  // ── kitchen dimmer ─────────────────────────────────────────────────
+  const kitchenCard   = document.getElementById('kitchen-card');
+  const kitchenSlider = document.getElementById('kitchen-slider');
+  const kitchenVal    = document.getElementById('kitchen-val');
+  let kitchenDragging = false;
+
+  function kitchenSetFill(val) {
+    kitchenSlider.style.setProperty('--fill', val + '%');
+    kitchenVal.textContent = val === 0 ? 'OFF' : val + '%';
+    kitchenCard.classList.toggle('is-on', val > 0);
+  }
+
+  kitchenSlider.addEventListener('input', () => kitchenSetFill(parseInt(kitchenSlider.value)));
+  kitchenSlider.addEventListener('pointerdown', () => kitchenDragging = true);
+  kitchenSlider.addEventListener('pointerup', async () => {
+    kitchenDragging = false;
+    await apiFetch(`/api/kitchen/brightness/${kitchenSlider.value}`, 'POST');
+  });
+
+  async function kitchenLoadStatus() {
+    try {
+      const s = await apiFetch('/api/kitchen/status');
+      if (!kitchenDragging) {
+        kitchenSlider.value = s.brightness;
+        kitchenSetFill(s.brightness);
+      }
+    } catch (_) {}
+  }
+
+  kitchenLoadStatus();
+  setInterval(kitchenLoadStatus, 10000);
 </script>
 </body>
 </html>
