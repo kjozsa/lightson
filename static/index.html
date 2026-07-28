@@ -226,6 +226,13 @@
       padding: 4px 2px;
     }
 
+    .lights-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .lights-head .section-label { flex: 1; }
+
     .bs-card {
       background: var(--surface);
       border: 1px solid var(--border);
@@ -430,8 +437,6 @@
 <header>
   <div class="header-row">
     <h1>Lights<span>On</span></h1>
-    <button class="btn btn-on"  id="btn-all-on" >All ON</button>
-    <button class="btn btn-off" id="btn-all-off">All OFF</button>
     <button class="btn btn-refresh" id="btn-refresh" title="Re-scan devices">
       <span id="refresh-icon">⟳</span>
     </button>
@@ -439,7 +444,11 @@
 </header>
 
 <main>
-  <div class="section-label">Lights</div>
+  <div class="lights-head">
+    <div class="section-label">Lights</div>
+    <button class="btn btn-on"  id="btn-all-on" >All ON</button>
+    <button class="btn btn-off" id="btn-all-off">All OFF</button>
+  </div>
   <div id="status-bar"></div>
   <div id="device-list"></div>
 
