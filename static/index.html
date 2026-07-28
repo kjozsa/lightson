@@ -452,6 +452,9 @@
            min="0" max="100" value="0">
   </div>
 
+  <div class="section-label" id="plugs-label" style="display:none">Plugs</div>
+  <div id="plug-list"></div>
+
   <div class="section-label">Music</div>
   <div class="bs-card">
     <div class="bs-inputs">
@@ -475,6 +478,8 @@
 
 <script>
   const list      = document.getElementById('device-list');
+  const plugList  = document.getElementById('plug-list');
+  const plugsLabel= document.getElementById('plugs-label');
   const statusBar = document.getElementById('status-bar');
   const btnAllOn  = document.getElementById('btn-all-on');
   const btnAllOff = document.getElementById('btn-all-off');
@@ -502,37 +507,32 @@
     list.innerHTML = Array(n).fill('<div class="skeleton"></div>').join('');
   }
 
-  function renderDevices() {
-    if (!devices.length) {
-      list.innerHTML = `<div class="empty">No devices found.<br>Run <strong>Refresh</strong> to scan the network.</div>`;
-      return;
-    }
-
-    list.innerHTML = devices.map(dev => {
-      const isOn    = dev.state === true;
-      const stateLabel = dev.state === null ? '???' : (isOn ? 'ON' : 'OFF');
-      return `
-        <div class="card ${isOn ? 'is-on' : ''}" data-id="${dev.id}" role="button" tabindex="0"
-             aria-label="${dev.name}, ${stateLabel}">
-          <div class="card-info">
-            <div class="card-name">${escHtml(dev.name)}</div>
-            <div class="card-meta">
-              <span class="badge">${dev.method}</span>
-              <span class="card-state-label">${stateLabel}</span>
-            </div>
+  function cardHtml(dev) {
+    const isOn    = dev.state === true;
+    const stateLabel = dev.state === null ? '???' : (isOn ? 'ON' : 'OFF');
+    return `
+      <div class="card ${isOn ? 'is-on' : ''}" data-id="${dev.id}" role="button" tabindex="0"
+           aria-label="${dev.name}, ${stateLabel}">
+        <div class="card-info">
+          <div class="card-name">${escHtml(dev.name)}</div>
+          <div class="card-meta">
+            <span class="badge">${dev.method}</span>
+            <span class="card-state-label">${stateLabel}</span>
           </div>
-          <label class="toggle" aria-label="Toggle ${escHtml(dev.name)}"
-                 onclick="event.stopPropagation()">
-            <input type="checkbox" ${isOn ? 'checked' : ''}
-                   onchange="handleToggle(event, ${dev.id})">
-            <span class="toggle-track"></span>
-            <span class="toggle-thumb"></span>
-          </label>
-        </div>`;
-    }).join('');
+        </div>
+        <label class="toggle" aria-label="Toggle ${escHtml(dev.name)}"
+               onclick="event.stopPropagation()">
+          <input type="checkbox" ${isOn ? 'checked' : ''}
+                 onchange="handleToggle(event, ${dev.id})">
+          <span class="toggle-track"></span>
+          <span class="toggle-thumb"></span>
+        </label>
+      </div>`;
+  }
 
+  function wireCards(container) {
     // tap on card body (not the toggle itself) also toggles
-    list.querySelectorAll('.card').forEach(card => {
+    container.querySelectorAll('.card').forEach(card => {
       card.addEventListener('click', () => {
         const id = parseInt(card.dataset.id);
         const cb = card.querySelector('input[type=checkbox]');
@@ -545,6 +545,23 @@
         }
       });
     });
+  }
+
+  function renderDevices() {
+    const lights = devices.filter(d => d.is_light !== false);
+    const plugs  = devices.filter(d => d.is_light === false);
+
+    if (!devices.length) {
+      list.innerHTML = `<div class="empty">No devices found.<br>Run <strong>Refresh</strong> to scan the network.</div>`;
+    } else {
+      list.innerHTML = lights.map(cardHtml).join('');
+    }
+
+    plugList.innerHTML = plugs.map(cardHtml).join('');
+    plugsLabel.style.display = plugs.length ? '' : 'none';
+
+    wireCards(list);
+    wireCards(plugList);
   }
 
   function escHtml(s) {
@@ -572,7 +589,7 @@
   async function handleToggle(event, id, currentState) {
     if (event) event.stopPropagation();
 
-    const card = list.querySelector(`.card[data-id="${id}"]`);
+    const card = document.querySelector(`.card[data-id="${id}"]`);
     if (!card || card.classList.contains('busy')) return;
 
     // Determine what the new state should be
@@ -605,7 +622,7 @@
     const dev = devices.find(d => d.id === id);
     if (dev) dev.state = state;
 
-    const card = list.querySelector(`.card[data-id="${id}"]`);
+    const card = document.querySelector(`.card[data-id="${id}"]`);
     if (!card) return;
     const cb = card.querySelector('input[type=checkbox]');
     const label = card.querySelector('.card-state-label');
@@ -622,9 +639,9 @@
     btns.forEach(b => b.disabled = true);
     setStatus(`Turning all ${action.toUpperCase()}…`);
 
-    // Optimistic update
+    // Optimistic update — plugs (e.g. stardust) are excluded from All ON/OFF
     const newState = action === 'on';
-    devices.forEach(dev => updateDeviceState(dev.id, newState));
+    devices.forEach(dev => { if (dev.is_light !== false) updateDeviceState(dev.id, newState); });
 
     try {
       const res = await apiFetch(`/api/all/${action}`, 'POST');

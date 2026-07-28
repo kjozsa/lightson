@@ -23,6 +23,10 @@ import lights
 
 BLUESOUND_URL = "http://192.168.10.130:11000"
 
+# Device names that are plugs, not lights. These are shown separately in the UI
+# and are ignored by the All ON / All OFF actions.
+PLUG_NAMES = {"stardust"}
+
 KITCHEN_ID      = "bf2dd20378b84bac28kecg"
 KITCHEN_IP      = "192.168.10.199"
 KITCHEN_KEY     = "R`jJ]=@TXaixN!$("
@@ -89,6 +93,7 @@ async def list_devices():
             "state": state,
             "method": "local" if dev.get("ip") else "cloud",
             "online": dev.get("online", False),
+            "is_light": dev["name"] not in PLUG_NAMES,
         }
 
     entries = await asyncio.gather(*[_status_entry(n, d) for n, d in sorted(devs.items())])
@@ -133,8 +138,9 @@ async def all_action(action: str):
         raise HTTPException(400, "action must be 'on' or 'off'")
     devs = await _run(_load_devices_safe)
     target = action == "on"
+    lights_only = [dev for dev in devs.values() if dev["name"] not in PLUG_NAMES]
     results = await asyncio.gather(
-        *[_run(lights.set_switch, dev, target) for dev in devs.values()],
+        *[_run(lights.set_switch, dev, target) for dev in lights_only],
         return_exceptions=True,
     )
     failed = sum(1 for r in results if isinstance(r, Exception) or not r)
