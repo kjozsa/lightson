@@ -498,7 +498,6 @@
   // ── state ──────────────────────────────────────────────────────────
   let devices = [];   // [{id, name, state, method}]
   let loading = false;
-  let inFlight = 0;   // commands awaiting a reply — pause polling while >0
 
   // ── helpers ────────────────────────────────────────────────────────
   function setStatus(msg, isError = false) {
@@ -579,11 +578,11 @@
   }
 
   // ── load all statuses ──────────────────────────────────────────────
-  async function loadDevices(silent = false) {
+  async function loadDevices() {
     if (loading) return;
     loading = true;
     if (!devices.length) renderSkeletons(3);
-    if (!silent || !devices.length) setStatus(devices.length ? 'Refreshing…' : 'Loading…');
+    setStatus(devices.length ? 'Refreshing…' : 'Loading…');
     try {
       devices = await apiFetch('/api/devices');
       renderDevices();
@@ -615,7 +614,6 @@
     card.classList.add('busy');
     updateDeviceState(id, newState);
 
-    inFlight++;
     try {
       const action = newState ? 'on' : 'off';
       const res = await apiFetch(`/api/device/${id}/${action}`, 'POST');
@@ -625,7 +623,6 @@
       updateDeviceState(id, !newState);
       setStatus(`Failed to toggle device: ${e.message}`, true);
     } finally {
-      inFlight--;
       card.classList.remove('busy');
     }
   }
@@ -655,7 +652,6 @@
     const newState = action === 'on';
     devices.forEach(dev => { if (dev.is_light !== false) updateDeviceState(dev.id, newState); });
 
-    inFlight++;
     try {
       const res = await apiFetch(`/api/all/${action}`, 'POST');
       if (res.failed > 0) {
@@ -668,7 +664,6 @@
       setStatus('Command failed: ' + e.message, true);
       await loadDevices();
     } finally {
-      inFlight--;
       btns.forEach(b => b.disabled = false);
     }
   }
@@ -829,28 +824,10 @@
     } catch (_) {}
   }
 
-  // ── polling & resume ───────────────────────────────────────────────
-  // The PWA keeps the page alive in the background and browsers freeze
-  // timers there, so on resume everything on screen is stale. Re-fetch
-  // whenever the app becomes visible again, and only poll while visible.
-  let bsTimer = null, kitchenTimer = null, deviceTimer = null, lastRefresh = 0;
-
-  function pollDevices() {
-    if (inFlight) return;   // don't clobber an optimistic update mid-command
-    loadDevices(true);
-  }
-
-  function startPolling() {
-    if (!bsTimer)      bsTimer      = setInterval(bsLoadStatus, 5000);
-    if (!kitchenTimer) kitchenTimer = setInterval(kitchenLoadStatus, 10000);
-    if (!deviceTimer)  deviceTimer  = setInterval(pollDevices, 15000);
-  }
-
-  function stopPolling() {
-    clearInterval(bsTimer);      bsTimer = null;
-    clearInterval(kitchenTimer); kitchenTimer = null;
-    clearInterval(deviceTimer);  deviceTimer = null;
-  }
+  // ── refresh on resume ──────────────────────────────────────────────
+  // No polling: everything is re-fetched on load and whenever the app comes
+  // back to the foreground, which is when the stale state would be visible.
+  let lastRefresh = 0;
 
   function refreshAll() {
     // several resume events can fire at once (visibilitychange + focus + pageshow)
@@ -863,18 +840,12 @@
   }
 
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      refreshAll();
-      startPolling();
-    } else {
-      stopPolling();
-    }
+    if (document.visibilityState === 'visible') refreshAll();
   });
   window.addEventListener('pageshow', refreshAll);   // incl. bfcache restore
   window.addEventListener('focus', refreshAll);
 
   refreshAll();
-  startPolling();
 </script>
 </body>
 </html>
