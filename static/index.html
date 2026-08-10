@@ -825,9 +825,10 @@
   }
 
   // ── refresh on resume ──────────────────────────────────────────────
-  // No polling: everything is re-fetched on load and whenever the app comes
-  // back to the foreground, which is when the stale state would be visible.
-  let lastRefresh = 0;
+  // Devices and the dimmer are only re-fetched on load, on resume and on ⟳.
+  // The music card is the exception: it changes on its own (track, volume),
+  // so it ticks along — but only while the app is actually on screen.
+  let lastRefresh = 0, bsTimer = null;
 
   function refreshAll() {
     // several resume events can fire at once (visibilitychange + focus + pageshow)
@@ -839,13 +840,28 @@
     kitchenLoadStatus();
   }
 
+  function startBsPolling() {
+    if (!bsTimer) bsTimer = setInterval(bsLoadStatus, 5000);
+  }
+
+  function stopBsPolling() {
+    clearInterval(bsTimer);
+    bsTimer = null;
+  }
+
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') refreshAll();
+    if (document.visibilityState === 'visible') {
+      refreshAll();
+      startBsPolling();
+    } else {
+      stopBsPolling();
+    }
   });
   window.addEventListener('pageshow', refreshAll);   // incl. bfcache restore
   window.addEventListener('focus', refreshAll);
 
   refreshAll();
+  startBsPolling();
 </script>
 </body>
 </html>
