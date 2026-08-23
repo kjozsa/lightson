@@ -100,12 +100,23 @@ def load_devices() -> dict:
 
 # --- control ------------------------------------------------------------------
 
+def local_device(dev):
+    """Local connection to a switch.
+
+    Retries are capped: tinytuya defaults to 5 tries 5s apart, so a device that
+    dropped off the LAN stalls the caller for ~30s before the cloud fallback.
+    """
+    d = tinytuya.OutletDevice(dev_id=dev["id"], address=dev["ip"],
+                              local_key=dev["local_key"], version=dev["version"])
+    d.set_socketTimeout(5)
+    d.set_socketRetryLimit(1)
+    d.set_socketRetryDelay(1)
+    return d
+
+
 def get_status(dev):
     if dev["ip"]:
-        d = tinytuya.OutletDevice(dev_id=dev["id"], address=dev["ip"],
-                                  local_key=dev["local_key"], version=dev["version"])
-        d.set_socketTimeout(5)
-        result = d.status()
+        result = local_device(dev).status()
         if result and "dps" in result:
             return result["dps"].get("1")
     result = get_cloud().getstatus(dev["id"])
@@ -117,10 +128,7 @@ def get_status(dev):
 
 def set_switch(dev, state: bool):
     if dev["ip"]:
-        d = tinytuya.OutletDevice(dev_id=dev["id"], address=dev["ip"],
-                                  local_key=dev["local_key"], version=dev["version"])
-        d.set_socketTimeout(5)
-        result = d.set_value("1", state)
+        result = local_device(dev).set_value("1", state)
         if result and "Error" not in str(result):
             return True
     result = get_cloud().sendcommand(dev["id"], [{"code": "switch_1", "value": state}])

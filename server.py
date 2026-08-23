@@ -28,7 +28,7 @@ BLUESOUND_URL = "http://192.168.10.130:11000"
 PLUG_NAMES = {"stardust"}
 
 KITCHEN_ID      = "bf2dd20378b84bac28kecg"
-KITCHEN_IP      = "192.168.10.199"
+KITCHEN_IP      = "192.168.10.200"
 KITCHEN_KEY     = "R`jJ]=@TXaixN!$("
 KITCHEN_VERSION = 3.5
 
@@ -39,6 +39,8 @@ def _kitchen_device():
         local_key=KITCHEN_KEY, version=KITCHEN_VERSION,
     )
     d.set_socketTimeout(5)
+    d.set_socketRetryLimit(1)
+    d.set_socketRetryDelay(1)
     return d
 
 
@@ -59,6 +61,9 @@ def _set_kitchen_brightness(level: int):
     else:
         dev.set_multiple_values({"20": True, "22": max(10, level * 10)})
 HDMI_PLAY_URL = "Capture:hw:imxspdif,0/1/25/2?id=input2"
+
+# Per-device budget for /api/devices: a local read plus the cloud fallback.
+STATUS_TIMEOUT = 10
 
 app = FastAPI(title="LightsOn")
 _pool = ThreadPoolExecutor(max_workers=8)
@@ -86,13 +91,17 @@ async def list_devices():
     devs = await _run(_load_devices_safe)
 
     async def _status_entry(num, dev):
-        state = await _run(lights.get_status, dev)
+        # One unreachable device must not hold up the whole list.
+        try:
+            state = await asyncio.wait_for(_run(lights.get_status, dev), STATUS_TIMEOUT)
+        except asyncio.TimeoutError:
+            state = None
         return {
             "id": num,
             "name": dev["name"],
             "state": state,
             "method": "local" if dev.get("ip") else "cloud",
-            "online": dev.get("online", False),
+            "online": dev.get("online", False) and state is not None,
             "is_light": dev["name"] not in PLUG_NAMES,
         }
 
