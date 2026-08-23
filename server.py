@@ -8,6 +8,7 @@ or:
 """
 
 import asyncio
+import time
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -27,16 +28,25 @@ BLUESOUND_URL = "http://192.168.10.130:11000"
 # and are ignored by the All ON / All OFF actions.
 PLUG_NAMES = {"stardust"}
 
-KITCHEN_ID      = "bf2dd20378b84bac28kecg"
-KITCHEN_IP      = "192.168.10.200"
-KITCHEN_KEY     = "R`jJ]=@TXaixN!$("
-KITCHEN_VERSION = 3.5
+KITCHEN_ID = "bf2dd20378b84bac28kecg"
+
+# The bulb's address comes from the bulb cache, not from a constant — DHCP moves
+# it. On a failed call we rescan for it once, at most this often.
+RESCAN_INTERVAL = 120
+_last_rescan = 0.0
 
 
-def _kitchen_device():
+def _kitchen_entry() -> dict:
+    entry = lights.load_bulbs().get(KITCHEN_ID)
+    if not entry or not entry.get("ip"):
+        raise HTTPException(503, "Kitchen bulb not in the local cache — run: lights.py refresh")
+    return entry
+
+
+def _kitchen_device(entry: dict):
     d = tinytuya.BulbDevice(
-        dev_id=KITCHEN_ID, address=KITCHEN_IP,
-        local_key=KITCHEN_KEY, version=KITCHEN_VERSION,
+        dev_id=entry["id"], address=entry["ip"],
+        local_key=entry["local_key"], version=entry["version"],
     )
     d.set_socketTimeout(5)
     d.set_socketRetryLimit(1)
@@ -44,9 +54,33 @@ def _kitchen_device():
     return d
 
 
+def _rescan_kitchen(entry: dict):
+    """Look the bulb up by device id and persist its new address, if it moved."""
+    global _last_rescan
+    now = time.monotonic()
+    if now - _last_rescan < RESCAN_INTERVAL:
+        return None
+    _last_rescan = now
+    found = lights.scan_ips(maxretry=3).get(KITCHEN_ID)
+    if not found or found["ip"] == entry.get("ip"):
+        return None
+    return lights.update_bulb(KITCHEN_ID, **found)
+
+
+def _kitchen_call(fn):
+    """Run fn(device); on failure rescan for a moved bulb and try once more."""
+    entry = _kitchen_entry()
+    result = fn(_kitchen_device(entry))
+    if result is None or "Error" in str(result):
+        moved = _rescan_kitchen(entry)
+        if moved:
+            result = fn(_kitchen_device(moved))
+    return result
+
+
 def _get_kitchen_brightness() -> int:
     """Returns 0 (off) or 1–100 (brightness %)."""
-    status = _kitchen_device().status()
+    status = _kitchen_call(lambda d: d.status())
     dps = (status or {}).get("dps", {})
     if not dps.get("20", False):
         return 0
@@ -55,11 +89,10 @@ def _get_kitchen_brightness() -> int:
 
 def _set_kitchen_brightness(level: int):
     """level 0 = off; 1–100 = on + dim."""
-    dev = _kitchen_device()
     if level == 0:
-        dev.set_value("20", False)
+        _kitchen_call(lambda d: d.set_value("20", False))
     else:
-        dev.set_multiple_values({"20": True, "22": max(10, level * 10)})
+        _kitchen_call(lambda d: d.set_multiple_values({"20": True, "22": max(10, level * 10)}))
 HDMI_PLAY_URL = "Capture:hw:imxspdif,0/1/25/2?id=input2"
 
 # Per-device budget for /api/devices: a local read plus the cloud fallback.

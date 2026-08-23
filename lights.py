@@ -34,6 +34,7 @@ TUYA_KEY    = os.environ["TUYA_KEY"]
 TUYA_SECRET = os.environ["TUYA_SECRET"]
 
 CACHE_FILE  = _base / "devices.json"
+BULB_CACHE  = _base / "bulbs.json"
 
 # --- cloud & cache ------------------------------------------------------------
 
@@ -55,30 +56,33 @@ def cmd_refresh():
 
     # Pull local IPs via UDP broadcast
     print("Scanning local network for device IPs...")
-    local_scan = tinytuya.deviceScan(verbose=False, maxretry=20, color=False)
-    ip_by_id = {info["gwId"]: {"ip": ip, "version": float(info.get("version", 3.3))}
-                for ip, info in local_scan.items()}
+    ip_by_id = scan_ips()
 
-    # Only keep switch devices (category "cz") that are on this network
+    # Only keep devices on this network. Switches (category "cz") are the numbered
+    # list; dimmable lights ("dj") go to their own cache, addressed by device id.
     import requests
     my_ip = requests.get("https://api.ipify.org").text.strip()
 
-    switches = []
+    switches, bulbs = [], {}
     for d in cloud_devices:
-        if d.get("category") != "cz":
+        if d.get("category") not in ("cz", "dj"):
             continue
         if d.get("ip") and d["ip"] != my_ip:
             print(f"  skipping {d['name']!r} — on a different network ({d['ip']})")
             continue
         local = ip_by_id.get(d["id"], {})
-        switches.append({
+        entry = {
             "name":      d["name"],
             "id":        d["id"],
             "local_key": d["local_key"],
             "ip":        local.get("ip"),
             "version":   local.get("version", 3.3),
             "online":    d.get("online", False),
-        })
+        }
+        if d["category"] == "cz":
+            switches.append(entry)
+        else:
+            bulbs[d["id"]] = entry
 
     # Assign stable numbers sorted by name
     switches.sort(key=lambda d: d["name"].lower())
@@ -89,6 +93,36 @@ def cmd_refresh():
     for num, dev in numbered.items():
         method = "local" if dev["ip"] else "cloud"
         print(f"  [{num}] {dev['name']:<24} ({method}, v{dev['version']})")
+
+    BULB_CACHE.write_text(json.dumps(bulbs, indent=2, ensure_ascii=False))
+    print(f"\nSaved {len(bulbs)} bulb(s) to {BULB_CACHE.name}:")
+    for dev in bulbs.values():
+        method = "local" if dev["ip"] else "cloud"
+        print(f"  {dev['id']:<24} {dev['name']:<24} ({method}, v{dev['version']})")
+
+
+def scan_ips(maxretry: int = 20) -> dict:
+    """UDP-broadcast scan -> {device id: {"ip", "version"}}."""
+    found = tinytuya.deviceScan(verbose=False, maxretry=maxretry, color=False)
+    return {info["gwId"]: {"ip": ip, "version": float(info.get("version", 3.3))}
+            for ip, info in found.items()}
+
+
+def load_bulbs() -> dict:
+    """Bulb cache keyed by device id. Empty until the first refresh."""
+    if not BULB_CACHE.exists():
+        return {}
+    return json.loads(BULB_CACHE.read_text())
+
+
+def update_bulb(dev_id: str, **fields) -> dict | None:
+    """Patch one cached bulb entry on disk (used when DHCP moves a device)."""
+    bulbs = load_bulbs()
+    if dev_id not in bulbs:
+        return None
+    bulbs[dev_id].update(fields)
+    BULB_CACHE.write_text(json.dumps(bulbs, indent=2, ensure_ascii=False))
+    return bulbs[dev_id]
 
 
 def load_devices() -> dict:
