@@ -175,9 +175,9 @@ def set_switch(dev, state: bool):
 
 def fmt_status(state):
     if state is True:
-        return "\033[32mON \033[0m"
+        return "\033[32mON     \033[0m"
     if state is False:
-        return "\033[31mOFF\033[0m"
+        return "\033[31mOFF    \033[0m"
     return "\033[33moffline\033[0m"
 
 
