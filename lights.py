@@ -153,6 +153,9 @@ def get_status(dev):
         result = local_device(dev).status()
         if result and "dps" in result:
             return result["dps"].get("1")
+    # the cloud keeps the last state of an offline device, so don't report it
+    if get_cloud().getconnectstatus(dev["id"]) is False:
+        return None
     result = get_cloud().getstatus(dev["id"])
     for item in (result or {}).get("result", []):
         if item["code"] == "switch_1":
@@ -175,7 +178,7 @@ def fmt_status(state):
         return "\033[32mON \033[0m"
     if state is False:
         return "\033[31mOFF\033[0m"
-    return "\033[33m???\033[0m"
+    return "\033[33moffline\033[0m"
 
 
 def cmd_status(devices, dev_ids):

@@ -518,7 +518,7 @@
 
   function cardHtml(dev) {
     const isOn    = dev.state === true;
-    const stateLabel = dev.state === null ? '???' : (isOn ? 'ON' : 'OFF');
+    const stateLabel = dev.state === null ? 'offline' : (isOn ? 'ON' : 'OFF');
     return `
       <div class="card ${isOn ? 'is-on' : ''}" data-id="${dev.id}" role="button" tabindex="0"
            aria-label="${dev.name}, ${stateLabel}">
@@ -638,7 +638,7 @@
 
     cb.checked = state === true;
     card.classList.toggle('is-on', state === true);
-    label.textContent = state === null ? '???' : (state ? 'ON' : 'OFF');
+    label.textContent = state === null ? 'offline' : (state ? 'ON' : 'OFF');
     card.setAttribute('aria-label', `${dev?.name ?? id}, ${label.textContent}`);
   }
 
